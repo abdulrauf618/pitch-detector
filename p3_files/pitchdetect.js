@@ -62,9 +62,19 @@ window.onload = function() {
 	audioContext = new AudioContext();
 	MAX_SIZE = Math.max(4,Math.floor(audioContext.sampleRate/5000));	// corresponds to a 5kHz signal
 	
-	
+	//On body load
 	loadAudio("sounds/whistling3.ogg",'whistling3');
 	loadAudio("sounds/1kHz_44100Hz_16bit_05sec.wav",'freq1k');
+	
+	/*
+	setTimeout(function(){
+		console.log('last recording-1');
+		playSound('lastRecordingBuffer');
+		setTimeout(function(){ 
+			console.log('last recording-2');
+			playSound('lastRecordingBuffer'); 
+		}, 300);
+	}, 300);*/
 	
 
 	detectorElem = document.getElementById( "detector" );
