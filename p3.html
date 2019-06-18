@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<!-- saved from url=(0062)http://excesssol.com/projects/adeelabbas/AOV/aov-pitch-detect/ -->
+<html><head><meta http-equiv="Content-Type" content="text/html; charset=windows-1252">
+		<title>AOV - Pitch Detector</title>
+		<link href="./p3_files/css" rel="stylesheet" type="text/css">
+		<style>
+			body { font: 14pt 'Alike', sans-serif;}
+			#note { font-size: 164px; }
+			.droptarget { background-color: #348781}
+			div.confident { color: black; }
+			div.vague { color: lightgrey; }
+			#note { display: inline-block; height:180px; text-align: left;}
+			
+			#detector { width: 300px; height: 300px; border: 4px solid gray; border-radius: 8px; text-align: center; padding-top: 10px;}
+			#output { width: 300px; height: 42px; }
+			#flat { display: none; }
+			#sharp { display: none; }
+			.flat #flat { display: inline; }
+			.sharp #sharp { display: inline; }
+
+			.col-md-6{
+				width: 50%; 
+				float: left;				
+			}
+		</style>
+	</head>
+	<body>
+		<div class="row">
+			<div class="col-md-6">
+				<section class="experiment" style="padding: 5px;">
+			        <span style="display: none;">
+				        <label for="time-interval">Time Interval (milliseconds):</label>
+				        <input type="text" id="time-interval" value="60000">ms
+				    
+				        <button id="start-recording">Start</button>
+				        <button id="stop-recording" disabled="">Stop</button>
+				    </span>
+			        
+					<button onclick="toggleLiveInput()" id="toggleLiveInputBtn">Start</button>						
+					<button id="save-recording" disabled="">Save</button>
+		    	</section>
+
+		    	<section class="experiment">
+			        <div id="audios-container"></div>
+			    </section>
+			    <form action="http://excesssol.com/audio-pitch" method="post" id="form1" enctype="application/x-www-form-urlencoded">
+			        <input type="hidden" name="blob" id="blob">
+			    </form>
+		    </div>
+		    <div class="col-md-6">
+                <button onclick="this.innerText = playSound(&#39;lastRecordingBuffer&#39;);" id="play-recording" disabled="">Play - Last Recording</button>
+                <button onclick="playSound(&#39;whistling3&#39;);">Sample sound1: whistling</button>
+                <button onclick="playSound(&#39;freq1k&#39;);">Sample sound2: freq of 1k</button>
+		    	<div style="display: none;">Pitch of last audio:<span id="pitchOfLastAudio"></span></div><br>
+				<div id="detector" class="vague">
+					<div class="pitch"><span id="pitch">--</span>Hz</div>
+					<div class="note"><span id="note">--</span></div>   
+					<canvas id="output" width="300" height="42"></canvas>
+					<div id="detune"><span id="detune_amt">--</span><span id="flat">cents &#9837;</span><span id="sharp">cents &#9839;</span></div>
+				</div>
+			</div>
+
+			
+    	
+	    <script type="text/javascript" src="./p3_files/jquery.min.js"></script>
+		<script src="./p3_files/MediaStreamRecorder.js"> </script>
+		<script src="./p3_files/pitchdetect.js"></script>
+		
+<script>
+        function captureUserMedia(mediaConstraints, successCallback, errorCallback) {
+            navigator.mediaDevices.getUserMedia(mediaConstraints).then(successCallback).catch(errorCallback);
+        }
+
+        var mediaConstraints = {
+            audio: true
+        };
+
+        var mediaRecorder;
+
+        var audiosContainer = document.getElementById('audios-container');
+        var index = 1;
+
+
+        document.querySelector('#start-recording').onclick = function() {
+            this.disabled = true;
+            $('#play-recording').prop('disabled', true);
+            $('#audios-container').html('');
+            captureUserMedia(mediaConstraints, onMediaSuccess, onMediaError);
+        };
+
+        document.querySelector('#stop-recording').onclick = function() {
+            this.disabled = true;            
+            mediaRecorder.stop();
+            mediaRecorder.stream.stop();
+
+            document.querySelector('#start-recording').disabled = false;
+            $('#play-recording').prop('disabled', false);
+
+            // setTimeout(function(){
+            // 	console.log('play recording');
+            // 	$('#play-recording').click();//play toggle
+            // },300);
+            
+            $('#audios-container audio').remove();
+        };
+
+        document.querySelector('#save-recording').onclick = function() {
+            this.disabled = true;
+            mediaRecorder.save();
+
+            // alert('Drop WebM file on Chrome or Firefox. Both can play entire file. VLC player or other players may not work.');
+        };
+
+
+        function onMediaSuccess(stream) {
+            var audio = document.createElement('audio');
+
+            audio = mergeProps(audio, {
+                controls: true,
+                muted: true
+            });
+            audio.srcObject = stream;
+            audio.play();
+
+            audiosContainer.appendChild(audio);
+            audiosContainer.appendChild(document.createElement('hr'));
+
+
+
+            mediaRecorder = new MediaStreamRecorder(stream);
+            mediaRecorder.stream = stream;
+            mediaRecorder.recorderType = StereoAudioRecorder;
+            mediaRecorder.mimeType = 'audio/wav';
+
+            mediaRecorder.audioChannels = 1;
+            mediaRecorder.ondataavailable = function(blob) {
+                var a = document.createElement('a');
+                a.target = '_blank';
+                a.innerHTML = 'Open Recorded Audio No. ' + (index++) + ' (Size: ' + bytesToSize(blob.size) + ')';//' Time Length: ' + getTimeLength(timeInterval);
+
+                a.href = URL.createObjectURL(blob);
+
+                audiosContainer.appendChild(a);
+                audiosContainer.appendChild(document.createElement('hr'));
+                
+                // document.getElementById("blob").value = blob;
+                // document.getElementById("form1").submit();
+
+
+                uploadToServer(blob);
+            };
+
+            var timeInterval = document.querySelector('#time-interval').value;
+            if (timeInterval) timeInterval = parseInt(timeInterval);
+            else timeInterval = 60 * 1000;
+
+            // get blob after specific time interval
+            mediaRecorder.start(timeInterval);
+
+            document.querySelector('#stop-recording').disabled = false;
+            document.querySelector('#save-recording').disabled = false;
+        }
+
+        function onMediaError(e) {
+            console.error('media error', e);
+        }
+
+
+        // below function via: http://goo.gl/B3ae8c
+        function bytesToSize(bytes) {
+            var k = 1000;
+            var sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+            if (bytes === 0) return '0 Bytes';
+            var i = parseInt(Math.floor(Math.log(bytes) / Math.log(k)), 10);
+            return (bytes / Math.pow(k, i)).toPrecision(3) + ' ' + sizes[i];
+        }
+
+        // below function via: http://goo.gl/6QNDcI
+        function getTimeLength(milliseconds) {
+            var data = new Date(milliseconds);
+            return data.getUTCHours() + " hours, " + data.getUTCMinutes() + " minutes and " + data.getUTCSeconds() + " second(s)";
+        }
+
+        window.onbeforeunload = function() {
+            document.querySelector('#start-recording').disabled = false;
+        };
+
+        function uploadToServer(blob) {
+        	console.log('uploadToPHPServer', blob);
+
+        	let fileReader = new FileReader();
+			fileReader.onloadend = () => {				
+			    audioContext.decodeAudioData( fileReader.result, function(buffer) {
+		    		lastRecordingBuffer = buffer;
+                    theBuffer = lastRecordingBuffer;
+		  		}, function(){alert("error loading!");} ); 
+			}
+
+			fileReader.readAsArrayBuffer(blob);
+
+        	
+            var file = new File([blob], 'msr-' + (new Date).toISOString().replace(/:|\./g, '-') + '.wav', {
+                type: 'audio/wav'
+            });
+
+            return; // If server has no node js server, then do not do this below work
+            // create FormData
+            var formData = new FormData();
+            formData.append('audio_filename', file.name);
+            formData.append('audio_blob', file);
+            var uploadURL = 'http://localhost:8080/audio-pitch';
+            
+            $.ajax({
+	            url: uploadURL,
+	            type: "POST",
+	            data:formData,
+	            dataType: 'jsonp',
+	            processData: false,
+	            contentType: false,
+	            success: function(data) {
+                    console.log(data);
+                    var dataHTML = '';
+                    for(var i=0; i<data.length; i++){
+                     	dataHTML += data[i]+' Hz at '+i+' sec';
+                 	}
+                 	$('#pitchOfLastAudio').html(dataHTML);
+	            }
+            });
+        }
+
+        function makeXMLHttpRequest(url, data, callback) {
+            var request = new XMLHttpRequest();
+            request.onreadystatechange = function() {
+                if (request.readyState == 4 && request.status == 200) {
+                    callback();
+                }
+            };
+            request.open('POST', url);
+            request.send(data);
+        }
+
+    </script>
+
+		
+	
+
+</div></body></html>
